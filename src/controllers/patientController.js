@@ -1,27 +1,33 @@
+const mongoose = require("mongoose");
 const User = require("../models/User");
 const Appointment = require("../models/Appointment");
 const TreatmentPlan = require("../models/TreatmentPlan");
 const Medicine = require("../models/Medicine");
-const Metrics = require("../models/Metrics"); // optional, if you have vitals/metrics
-const Report = require("../models/Report");   // optional
-const HealthProgress = require("../models/HealthProgress"); // optional
+const Metrics = require("../models/Metrics");
+const Report = require("../models/Report");
+const HealthProgress = require("../models/HealthProgress");
 
-// Helper: get logged-in user ID
 function getUserId(req) {
   if (req.user && req.user.id) return req.user.id;
   if (req.query && req.query.userId) return req.query.userId;
   return null;
 }
 
+// Helper to validate ObjectId format
+function isValidObjectId(id) {
+  return mongoose.Types.ObjectId.isValid(id);
+}
+
 /**
  * GET /api/patient/metrics
- * Fetch latest vitals (heart rate, BP, sessions, etc.)
  */
 exports.getMetrics = async (req, res) => {
   try {
     const userId = getUserId(req);
     if (!userId)
       return res.status(400).json({ success: false, message: "User ID missing" });
+    if (!isValidObjectId(userId))
+      return res.status(400).json({ success: false, message: "Invalid User ID format" });
 
     const metrics = await Metrics.findOne({ patient: userId })
       .sort({ createdAt: -1 })
@@ -36,13 +42,14 @@ exports.getMetrics = async (req, res) => {
 
 /**
  * GET /api/patient/appointments
- * Fetch all upcoming appointments for a patient
  */
 exports.getAppointments = async (req, res) => {
   try {
     const userId = getUserId(req);
     if (!userId)
       return res.status(400).json({ success: false, message: "User ID missing" });
+    if (!isValidObjectId(userId))
+      return res.status(400).json({ success: false, message: "Invalid User ID format" });
 
     const appointments = await Appointment.find({
       patient: userId,
@@ -61,13 +68,14 @@ exports.getAppointments = async (req, res) => {
 
 /**
  * GET /api/patient/summary
- * Patient’s quick vital summary
  */
 exports.getSummary = async (req, res) => {
   try {
     const userId = getUserId(req);
     if (!userId)
       return res.status(400).json({ success: false, message: "User ID missing" });
+    if (!isValidObjectId(userId))
+      return res.status(400).json({ success: false, message: "Invalid User ID format" });
 
     const summary = await Metrics.findOne({ patient: userId })
       .sort({ createdAt: -1 })
@@ -83,13 +91,14 @@ exports.getSummary = async (req, res) => {
 
 /**
  * GET /api/patient/health-progress
- * Compute health progress based on activities or treatment data
  */
 exports.getHealthProgress = async (req, res) => {
   try {
     const userId = getUserId(req);
     if (!userId)
       return res.status(400).json({ success: false, message: "User ID missing" });
+    if (!isValidObjectId(userId))
+      return res.status(400).json({ success: false, message: "Invalid User ID format" });
 
     const progress = await HealthProgress.findOne({ patient: userId })
       .sort({ createdAt: -1 })
@@ -104,13 +113,14 @@ exports.getHealthProgress = async (req, res) => {
 
 /**
  * GET /api/patient/report
- * Return patient’s chart data (e.g., monthly vitals or scores)
  */
 exports.getReport = async (req, res) => {
   try {
     const userId = getUserId(req);
     if (!userId)
       return res.status(400).json({ success: false, message: "User ID missing" });
+    if (!isValidObjectId(userId))
+      return res.status(400).json({ success: false, message: "Invalid User ID format" });
 
     const report = await Report.find({ patient: userId })
       .sort({ createdAt: 1 })
@@ -126,13 +136,14 @@ exports.getReport = async (req, res) => {
 
 /**
  * GET /api/patient/treatment
- * Fetch active treatment plan
  */
 exports.getTreatment = async (req, res) => {
   try {
     const userId = getUserId(req);
     if (!userId)
       return res.status(400).json({ success: false, message: "User ID missing" });
+    if (!isValidObjectId(userId))
+      return res.status(400).json({ success: false, message: "Invalid User ID format" });
 
     const plan = await TreatmentPlan.findOne({ patient: userId })
       .sort({ createdAt: -1 })
@@ -147,13 +158,14 @@ exports.getTreatment = async (req, res) => {
 
 /**
  * GET /api/patient/medicine
- * Fetch current medication info
  */
 exports.getMedicine = async (req, res) => {
   try {
     const userId = getUserId(req);
     if (!userId)
       return res.status(400).json({ success: false, message: "User ID missing" });
+    if (!isValidObjectId(userId))
+      return res.status(400).json({ success: false, message: "Invalid User ID format" });
 
     const med = await Medicine.find({ patient: userId })
       .sort({ createdAt: -1 })
