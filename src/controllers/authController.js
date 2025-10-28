@@ -1,3 +1,4 @@
+// src/controllers/authController.js
 const { validationResult } = require("express-validator");
 const bcrypt = require("bcryptjs");
 const User = require("../models/User");
@@ -10,7 +11,7 @@ const setCookie = (res, token) => {
   res.cookie("token", token, {
     httpOnly: true,
     sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
-    secure: process.env.NODE_ENV === "production", // HTTPS only in prod
+    secure: process.env.NODE_ENV === "production",
     maxAge: 1000 * 60 * 60 * 24 * 7, // 7 days
   });
 };
@@ -21,25 +22,23 @@ const setCookie = (res, token) => {
 exports.register = async (req, res) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
-    return res.status(400).json({
-      success: false,
-      errors: errors.array(),
-    });
+    return res.status(400).json({ success: false, errors: errors.array() });
   }
 
-  const {
-    fullName,
-    email,
-    password,
-    phone,
-    age,
-    gender,
-    country,
-    reasonForJoining,
-    role, // user | practitioner | admin
-  } = req.body;
-
   try {
+    const {
+      fullName,
+      email,
+      password,
+      phone,
+      age,
+      gender,
+      country,
+      reasonForJoining,
+      role, // user | practitioner | admin
+    } = req.body;
+
+    // check if user exists
     const existingUser = await User.findOne({ email });
     if (existingUser)
       return res.status(400).json({ success: false, message: "Email already exists" });
@@ -61,11 +60,12 @@ exports.register = async (req, res) => {
     const token = generateToken({ id: user._id, role: user.role });
     setCookie(res, token);
 
+    // dynamic redirect
     let redirectUrl = "/";
     if (user.role === "admin") redirectUrl = "/admin/dashboard";
     else if (user.role === "practitioner") redirectUrl = "/practitioner/dashboard";
 
-    return res.status(201).json({
+    res.status(201).json({
       success: true,
       message: "Registration successful",
       user: {
@@ -79,10 +79,7 @@ exports.register = async (req, res) => {
     });
   } catch (error) {
     console.error("Register error:", error);
-    res.status(500).json({
-      success: false,
-      message: "Internal server error during registration",
-    });
+    res.status(500).json({ success: false, message: "Server error during registration" });
   }
 };
 
@@ -90,29 +87,27 @@ exports.register = async (req, res) => {
    🔐 LOGIN USER / PRACTITIONER / ADMIN
 ===================================================== */
 exports.login = async (req, res) => {
-  const { email, password } = req.body;
-
   try {
-    // Find user
+    const { email, password } = req.body;
+    if (!email || !password)
+      return res.status(400).json({ success: false, message: "Email and password required" });
+
     const user = await User.findOne({ email });
     if (!user)
       return res.status(400).json({ success: false, message: "Invalid credentials" });
 
-    // Validate password
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch)
       return res.status(400).json({ success: false, message: "Invalid credentials" });
 
-    // Generate JWT token
     const token = generateToken({ id: user._id, role: user.role });
     setCookie(res, token);
 
-    // Decide redirect based on role
     let redirectUrl = "/";
     if (user.role === "admin") redirectUrl = "/dashboard/admin";
     else if (user.role === "practitioner") redirectUrl = "/dashboard/practitioner";
 
-    return res.status(200).json({
+    res.status(200).json({
       success: true,
       message: "Login successful",
       user: {
@@ -126,17 +121,14 @@ exports.login = async (req, res) => {
     });
   } catch (error) {
     console.error("Login error:", error);
-    res.status(500).json({
-      success: false,
-      message: "Internal server error during login",
-    });
+    res.status(500).json({ success: false, message: "Server error during login" });
   }
 };
 
 /* =====================================================
    🚪 LOGOUT
 ===================================================== */
-exports.logout = (req, res) => {
+exports.logout = async (req, res) => {
   try {
     res.cookie("token", "", {
       httpOnly: true,

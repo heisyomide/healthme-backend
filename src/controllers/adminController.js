@@ -1,31 +1,43 @@
 // src/controllers/adminController.js
+const mongoose = require("mongoose");
 const User = require("../models/User");
 const KYC = require("../models/KYC");
 const Appointment = require("../models/Appointment");
 const Support = require("../models/SupportMessage");
 
-// Overview: counts and simple DB health check
+// 🧠 Helper: Validate ObjectId
+function isValidObjectId(id) {
+  return mongoose.Types.ObjectId.isValid(id);
+}
+
+/* =====================================================
+   📊 ADMIN DASHBOARD OVERVIEW
+===================================================== */
 exports.overview = async (req, res) => {
   try {
     const totalUsers = await User.countDocuments();
     const totalPractitioners = await User.countDocuments({ role: "practitioner" });
-    const activeSessions = await Appointment.countDocuments({ status: "ongoing" }); // adapt to your schema
-    // Simple DB health (last write timestamp or connectivity)
+    const activeSessions = await Appointment.countDocuments({ status: "ongoing" });
     const latestUser = await User.findOne().sort({ updatedAt: -1 }).lean();
 
-    res.json({
-      totalUsers,
-      totalPractitioners,
-      activeSessions,
-      dbHealthy: !!latestUser,
+    return res.json({
+      success: true,
+      data: {
+        totalUsers,
+        totalPractitioners,
+        activeSessions,
+        dbHealthy: !!latestUser,
+      },
     });
   } catch (err) {
     console.error("Admin overview error:", err);
-    res.status(500).json({ message: "Server error" });
+    return res.status(500).json({ success: false, message: "Server error" });
   }
 };
 
-// Get paginated list of practitioners
+/* =====================================================
+   👩‍⚕ GET PRACTITIONERS (paginated)
+===================================================== */
 exports.getPractitioners = async (req, res) => {
   try {
     const page = Math.max(1, parseInt(req.query.page || "1"));
@@ -39,14 +51,16 @@ exports.getPractitioners = async (req, res) => {
       .limit(perPage)
       .lean();
 
-    res.json({ items, page, perPage, total });
+    return res.json({ success: true, data: { items, page, perPage, total } });
   } catch (err) {
-    console.error("Get practitioners:", err);
-    res.status(500).json({ message: "Server error" });
+    console.error("Get practitioners error:", err);
+    return res.status(500).json({ success: false, message: "Server error" });
   }
 };
 
-// Get paginated list of users (patients)
+/* =====================================================
+   👥 GET USERS (patients)
+===================================================== */
 exports.getUsers = async (req, res) => {
   try {
     const page = Math.max(1, parseInt(req.query.page || "1"));
@@ -60,107 +74,121 @@ exports.getUsers = async (req, res) => {
       .limit(perPage)
       .lean();
 
-    res.json({ items, page, perPage, total });
+    return res.json({ success: true, data: { items, page, perPage, total } });
   } catch (err) {
-    console.error("Get users:", err);
-    res.status(500).json({ message: "Server error" });
+    console.error("Get users error:", err);
+    return res.status(500).json({ success: false, message: "Server error" });
   }
 };
 
-// KYC queue
+/* =====================================================
+   🪪 KYC QUEUE (pending requests)
+===================================================== */
 exports.getKycQueue = async (req, res) => {
   try {
     const queue = await KYC.find()
       .populate("userId", "fullName email role")
       .sort({ createdAt: -1 })
       .lean();
-    res.json(queue);
+
+    return res.json({ success: true, data: queue });
   } catch (err) {
-    console.error("Get KYC queue:", err);
-    res.status(500).json({ message: "Server error" });
+    console.error("Get KYC queue error:", err);
+    return res.status(500).json({ success: false, message: "Server error" });
   }
 };
 
-// Approve or reject a KYC
+/* =====================================================
+   📝 UPDATE KYC STATUS (approve / reject)
+===================================================== */
 exports.updateKycStatus = async (req, res) => {
   try {
     const { id } = req.params;
-    const { action, adminNote } = req.body; // action: "approve" or "reject"
+    const { action, adminNote } = req.body;
+
+    if (!isValidObjectId(id))
+      return res.status(400).json({ success: false, message: "Invalid KYC ID format" });
+
     const kyc = await KYC.findById(id);
-    if (!kyc) return res.status(404).json({ message: "KYC not found" });
+    if (!kyc) return res.status(404).json({ success: false, message: "KYC not found" });
 
     if (action === "approve") {
       kyc.status = "approved";
+      await User.findByIdAndUpdate(kyc.userId, { role: "practitioner" });
     } else if (action === "reject") {
       kyc.status = "rejected";
     } else {
-      return res.status(400).json({ message: "Invalid action" });
+      return res.status(400).json({ success: false, message: "Invalid action" });
     }
 
     kyc.adminNote = adminNote || "";
     kyc.reviewedAt = new Date();
-    kyc.reviewedBy = req.admin ? req.admin._id : req.user?.id || null;
-
+    kyc.reviewedBy = req.user?.id || null;
     await kyc.save();
 
-    // (Optional) update user role to practitioner when approved
-    if (action === "approve") {
-      await User.findByIdAndUpdate(kyc.userId, { role: "practitioner" });
-    }
-
-    res.json({ message: `KYC ${action}d`, kyc });
+    return res.json({ success: true, message: KYC `${action}d, data: kyc `});
   } catch (err) {
-    console.error("Update KYC:", err);
-    res.status(500).json({ message: "Server error" });
+    console.error("Update KYC error:", err);
+    return res.status(500).json({ success: false, message: "Server error" });
   }
 };
 
-// Simple security logs stub
+/* =====================================================
+   🧾 SECURITY LOGS (stub)
+===================================================== */
 exports.getSecurityLogs = async (req, res) => {
   try {
-    // If you have a logs collection, query it. For now return stub data:
     const logs = [
-      { id: 1, type: "login_attempt", user: "user@example.com", ip: "127.0.0.1", outcome: "success", at: new Date() },
-      { id: 2, type: "kyc_submit", user: "dr.jane@example.com", ip: "127.0.0.1", outcome: "submitted", at: new Date() },
+      { id: 1, type: "login_attempt", user: "user@example.com", outcome: "success", at: new Date() },
+      { id: 2, type: "kyc_submit", user: "dr.jane@example.com", outcome: "submitted", at: new Date() },
     ];
-    res.json(logs);
+    return res.json({ success: true, data: logs });
   } catch (err) {
-    console.error("Get logs:", err);
-    res.status(500).json({ message: "Server error" });
+    console.error("Get logs error:", err);
+    return res.status(500).json({ success: false, message: "Server error" });
   }
 };
 
-// Support messages list
+/* =====================================================
+   💬 SUPPORT MESSAGES
+===================================================== */
 exports.getSupportMessages = async (req, res) => {
   try {
     const messages = await Support.find().sort({ createdAt: -1 }).lean();
-    res.json(messages);
+    return res.json({ success: true, data: messages });
   } catch (err) {
-    console.error("Get support messages:", err);
-    res.status(500).json({ message: "Server error" });
+    console.error("Get support messages error:", err);
+    return res.status(500).json({ success: false, message: "Server error" });
   }
 };
 
-// Respond to support (admin reply)
+/* =====================================================
+   📩 RESPOND TO SUPPORT
+===================================================== */
 exports.respondSupport = async (req, res) => {
   try {
     const { id } = req.params;
     const { message } = req.body;
+
+    if (!isValidObjectId(id))
+      return res.status(400).json({ success: false, message: "Invalid Support ID format" });
+
     const support = await Support.findById(id);
-    if (!support) return res.status(404).json({ message: "Support message not found" });
+    if (!support)
+      return res.status(404).json({ success: false, message: "Support message not found" });
 
     support.responses = support.responses || [];
     support.responses.push({
-      adminId: req.admin ? req.admin._id : req.user?.id || null,
+      adminId: req.user?.id || null,
       message,
       at: new Date(),
     });
     support.status = "answered";
     await support.save();
 
-    res.json({ message: "Response sent", support });
+    return res.json({ success: true, message: "Response sent", data: support });
   } catch (err) {
-    console.error("Respond support:", err);
-    res.status(500).json({ message: "Server error" });
+    console.error("Respond support error:", err);
+    return res.status(500).json({ success: false, message: "Server error" });
   }
 };
