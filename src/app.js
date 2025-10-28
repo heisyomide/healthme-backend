@@ -30,7 +30,9 @@ app.use("/api/patient", patientRoutes);
 app.use("/api/location", require("./routes/location"));
 
 // === Health Check Route ===
-app.get("/api/health", (req, res) => res.json({ ok: true }));
 
+app.get("/", (req, res) => {
+  res.json({ success: true, message: "HealthMe API is running ✅" });
+});
 // === Export app ===
 module.exports = app;
