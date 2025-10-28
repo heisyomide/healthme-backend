@@ -1,7 +1,5 @@
-// src/models/SupportMessage.js
 const mongoose = require("mongoose");
 const Schema = mongoose.Schema;
-
 
 const practitionerSchema = new mongoose.Schema({
   user: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
@@ -26,3 +24,6 @@ const practitionerSchema = new mongoose.Schema({
   },
   isActive: { type: Boolean, default: true }, // Only active ones are shown publicly
 });
+
+// ✅ FIX: Export the model
+module.exports = mongoose.model("Practitioner", practitionerSchema);
