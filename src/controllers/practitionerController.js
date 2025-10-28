@@ -1,3 +1,4 @@
+// src/controllers/practitionerController.js
 const mongoose = require("mongoose");
 const Practitioner = require("../models/Practitioner");
 const Appointment = require("../models/Appointment");
@@ -7,7 +8,8 @@ const User = require("../models/User");
    🧠 Helper Functions
 ===================================================== */
 function getUserId(req) {
-  if (req.user && req.user.id) return req.user.id;
+  // 🔍 Get ID safely from token or query
+  if (req.user && (req.user.id || req.user._id)) return req.user.id || req.user._id;
   if (req.query && req.query.userId) return req.query.userId;
   return null;
 }
@@ -34,20 +36,24 @@ function calcProfileCompletion(p) {
 ===================================================== */
 exports.getOverview = async (req, res) => {
   try {
+    console.log("🩺 Practitioner Overview route hit");
     const userId = getUserId(req);
+    console.log("Extracted userId:", userId);
+
     if (!userId)
       return res.status(400).json({ success: false, message: "User ID missing" });
     if (!isValidObjectId(userId))
       return res.status(400).json({ success: false, message: "Invalid User ID format" });
 
+    // 🔍 Ensure practitioner exists
     const practitioner = await Practitioner.findOne({ user: userId })
       .populate("patients", "fullName email")
       .populate("appointments");
 
-    if (!practitioner)
-      return res
-        .status(404)
-        .json({ success: false, message: "Practitioner profile not found" });
+    if (!practitioner) {
+      console.log("❌ Practitioner not found for user:", userId);
+      return res.status(404).json({ success: false, message: "Practitioner profile not found" });
+    }
 
     const totalPatients = practitioner.patients?.length || 0;
     const upcomingAppointments =
@@ -66,13 +72,13 @@ exports.getOverview = async (req, res) => {
       },
     });
   } catch (err) {
-    console.error("getOverview error:", err);
-    res.status(500).json({ success: false, message: "Server error" });
+    console.error("💥 getOverview error:", err.stack || err);
+    res.status(500).json({ success: false, message: "Server error: " + err.message });
   }
 };
 
 /* =====================================================
-   📅 Get All Appointments (for Practitioner)
+   📅 Get All Appointments
 ===================================================== */
 exports.getAppointments = async (req, res) => {
   try {
@@ -89,13 +95,13 @@ exports.getAppointments = async (req, res) => {
 
     res.json({ success: true, data: appointments });
   } catch (err) {
-    console.error("getAppointments error:", err);
-    res.status(500).json({ success: false, message: "Server error" });
+    console.error("💥 getAppointments error:", err.stack || err);
+    res.status(500).json({ success: false, message: "Server error: " + err.message });
   }
 };
 
 /* =====================================================
-   👥 Get All Patients Assigned to Practitioner
+   👥 Get Patients Assigned to Practitioner
 ===================================================== */
 exports.getPatients = async (req, res) => {
   try {
@@ -113,8 +119,8 @@ exports.getPatients = async (req, res) => {
 
     res.json({ success: true, data: practitioner.patients });
   } catch (err) {
-    console.error("getPatients error:", err);
-    res.status(500).json({ success: false, message: "Server error" });
+    console.error("💥 getPatients error:", err.stack || err);
+    res.status(500).json({ success: false, message: "Server error: " + err.message });
   }
 };
 
@@ -134,14 +140,12 @@ exports.getProfile = async (req, res) => {
       .lean();
 
     if (!practitioner)
-      return res
-        .status(404)
-        .json({ success: false, message: "Practitioner profile not found" });
+      return res.status(404).json({ success: false, message: "Practitioner profile not found" });
 
     res.json({ success: true, data: practitioner });
   } catch (err) {
-    console.error("getProfile error:", err);
-    res.status(500).json({ success: false, message: "Server error" });
+    console.error("💥 getProfile error:", err.stack || err);
+    res.status(500).json({ success: false, message: "Server error: " + err.message });
   }
 };
 
@@ -162,9 +166,7 @@ exports.updateProfile = async (req, res) => {
     }).select("-password");
 
     if (!practitioner)
-      return res
-        .status(404)
-        .json({ success: false, message: "Practitioner not found" });
+      return res.status(404).json({ success: false, message: "Practitioner not found" });
 
     res.json({
       success: true,
@@ -172,13 +174,13 @@ exports.updateProfile = async (req, res) => {
       data: practitioner,
     });
   } catch (err) {
-    console.error("updateProfile error:", err);
-    res.status(500).json({ success: false, message: "Server error" });
+    console.error("💥 updateProfile error:", err.stack || err);
+    res.status(500).json({ success: false, message: "Server error: " + err.message });
   }
 };
 
 /* =====================================================
-   🌍 Get All Active Practitioners (Public)
+   🌍 Public Endpoints
 ===================================================== */
 exports.getAllPractitioners = async (req, res) => {
   try {
@@ -194,14 +196,11 @@ exports.getAllPractitioners = async (req, res) => {
       data: practitioners,
     });
   } catch (err) {
-    console.error("getAllPractitioners error:", err);
-    res.status(500).json({ success: false, message: "Server error" });
+    console.error("💥 getAllPractitioners error:", err.stack || err);
+    res.status(500).json({ success: false, message: "Server error: " + err.message });
   }
 };
 
-/* =====================================================
-   🔎 Get Single Practitioner (Public)
-===================================================== */
 exports.getPractitionerById = async (req, res) => {
   try {
     const { id } = req.params;
@@ -215,13 +214,11 @@ exports.getPractitionerById = async (req, res) => {
       .lean();
 
     if (!practitioner)
-      return res
-        .status(404)
-        .json({ success: false, message: "Practitioner not found" });
+      return res.status(404).json({ success: false, message: "Practitioner not found" });
 
     res.status(200).json({ success: true, data: practitioner });
   } catch (err) {
-    console.error("getPractitionerById error:", err);
-    res.status(500).json({ success: false, message: "Server error" });
+    console.error("💥 getPractitionerById error:", err.stack || err);
+    res.status(500).json({ success: false, message: "Server error: " + err.message });
   }
 };
