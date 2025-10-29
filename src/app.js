@@ -10,14 +10,25 @@ const patientRoutes = require("./routes/patientRoutes");
 
 const app = express();
 
-// === Middleware ===
-app.use(helmet());
-app.use(express.json());
-app.use(cookieParser());
+// === CORS Configuration ===
+const allowedOrigins = [
+  "http://localhost:3000",
+  "https://healthme-frontend.vercel.app",
+];
+
 app.use(
   cors({
-    origin: process.env.FRONTEND_ORIGIN || "http://localhost:3000",
-    credentials: true, // Allow cookies and auth headers
+    origin: function (origin, callback) {
+      // allow requests with no origin (like mobile apps or curl)
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        console.log("❌ Blocked by CORS:", origin);
+        callback(new Error("Not allowed by CORS"));
+      }
+    },
+    methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
+    credentials: true,
   })
 );
 
