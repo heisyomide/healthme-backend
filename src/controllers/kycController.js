@@ -1,108 +1,208 @@
-// src/controllers/kycController.js
-const Kyc = require("../models/KYC");
+const KYC = require("../models/KYC");
 const User = require("../models/User");
+const { validationResult } = require("express-validator");
+const bcrypt = require("bcryptjs");
+const sendEmail = require("../utils/sendEmail");
 
-/**
- * 📤 Submit KYC (Practitioner sends form)
- */
-exports.submitKyc = async (req, res) => {
+/* =====================================================
+   🩺 Create or Update Practitioner KYC
+   (Frontend must include user info like email, name, etc.)
+===================================================== */
+exports.createOrUpdateKyc = async (req, res) => {
   try {
-    // If auth middleware sets req.user, use it; otherwise fallback to req.body.userId
-    const userId = req.user?.id || req.body.userId;
-    if (!userId) {
-      return res.status(400).json({ success: false, message: "User ID missing" });
+    const userId = req.user?.id || null;
+    const updates = req.body;
+
+    let kyc = userId
+      ? await KYC.findOne({ userId })
+      : await KYC.findOne({ email: updates.email });
+
+    if (!kyc) {
+      kyc = new KYC({ userId, ...updates });
+    } else {
+      Object.assign(kyc, updates);
     }
 
-    const { specialization, licenseNumber, yearsOfExperience, bio } = req.body;
-
-    const existingKyc = await Kyc.findOne({ userId });
-    if (existingKyc && existingKyc.status === "pending") {
-      return res
-        .status(400)
-        .json({ success: false, message: "KYC already submitted and pending review" });
+    // status logic
+    if (req.body._complete) {
+      kyc.status =
+        kyc.status === "payment_confirmed"
+          ? "kyc_pending"
+          : "pending_payment";
     }
-
-    const kyc = new Kyc({
-      userId,
-      specialization,
-      licenseNumber,
-      yearsOfExperience,
-      bio,
-      certification: req.file ? req.file.filename : null,
-      status: "pending",
-    });
 
     await kyc.save();
 
-    res.status(201).json({ success: true, message: "KYC submitted successfully", kyc });
+    return res.status(200).json({ success: true, data: kyc });
   } catch (err) {
-    console.error("Submit KYC error:", err);
-    res.status(500).json({ success: false, message: "Failed to submit KYC" });
+    console.error("createOrUpdateKyc error:", err);
+    return res
+      .status(500)
+      .json({ success: false, message: "Server error saving KYC" });
   }
 };
 
-/**
- * 📋 Get All KYCs (Admin view)
- */
-exports.getAllKycs = async (req, res) => {
+/* =====================================================
+   📤 Upload Practitioner Document
+===================================================== */
+exports.uploadDocument = async (req, res) => {
   try {
-    const kycs = await Kyc.find()
-      .populate("userId", "fullName email role")
-      .sort({ createdAt: -1 })
-      .lean();
-
-    res.status(200).json({ success: true, data: kycs });
-  } catch (err) {
-    console.error("Get all KYCs error:", err);
-    res.status(500).json({ success: false, message: "Failed to fetch KYCs" });
-  }
-};
-
-/**
- * 🔍 Get Single KYC by ID
- */
-exports.getKycById = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const kyc = await Kyc.findById(id).populate("userId", "fullName email role");
-    if (!kyc) {
+    const userId = req.user.id;
+    const kyc = await KYC.findOne({ userId });
+    if (!kyc)
       return res.status(404).json({ success: false, message: "KYC not found" });
+
+    if (req.file) {
+      const field = req.file.fieldname;
+      const path = `/uploads/kyc/${req.file.filename};`
+
+      if (field === "certificateDocuments") {
+        kyc.certificateDocuments = kyc.certificateDocuments || [];
+        kyc.certificateDocuments.push(path);
+      } else {
+        kyc[field] = path;
+      }
     }
 
-    res.status(200).json({ success: true, data: kyc });
+    await kyc.save();
+    res.json({ success: true, kyc });
   } catch (err) {
-    console.error("Get KYC by ID error:", err);
-    res.status(500).json({ success: false, message: "Failed to fetch KYC" });
+    console.error("uploadDocument error:", err);
+    res.status(500).json({ success: false, message: "Upload failed" });
   }
 };
 
-/**
- * 🧾 Approve or Reject KYC (Admin)
- */
-exports.updateKycStatus = async (req, res) => {
+/* =====================================================
+   🧑‍💼 Admin: View All KYC Submissions
+===================================================== */
+exports.adminListKycs = async (req, res) => {
   try {
-    const { id } = req.params;
-    const { action, adminNote } = req.body;
+    const items = await KYC.find()
+      .populate("userId", "fullName email")
+      .sort({ createdAt: -1 });
+    res.json({ success: true, data: items });
+  } catch (err) {
+    console.error("adminListKycs:", err);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+};
 
-    const kyc = await Kyc.findById(id);
-    if (!kyc) return res.status(404).json({ success: false, message: "KYC not found" });
+/* =====================================================
+   ✅ Admin: Review KYC (approve / reject / confirm_payment)
+===================================================== */
+exports.adminReviewKyc = async (req, res) => {
+  try {
+    const { id } = req.params; // kyc id
+    const { action, note } = req.body;
+    const kyc = await KYC.findById(id);
+    if (!kyc)
+      return res.status(404).json({ success: false, message: "KYC not found" });
+
+    if (action === "confirm_payment") {
+      kyc.status = "payment_confirmed";
+      await kyc.save();
+      sendEmail(
+        kyc.email,
+        "Payment Confirmed",
+        "We confirmed your subscription payment. Please proceed to KYC."
+      );
+      return res.json({ success: true, data: kyc });
+    }
 
     if (action === "approve") {
+      // 🟢 Create official Practitioner Account
+      const existing = await User.findOne({ email: kyc.email });
+      if (existing) {
+        return res.status(400).json({
+          success: false,
+          message: "Practitioner account already exists for this email.",
+        });
+      }
+
+      const hashedPassword = await bcrypt.hash(kyc.password, 10);
+
+      const newUser = await User.create({
+        fullName: kyc.fullName,
+        email: kyc.email,
+        password: hashedPassword,
+        phone: kyc.phone,
+        age: kyc.age,
+        gender: kyc.gender,
+        country: kyc.country,
+        role: "practitioner",
+        isVerifiedPractitioner: true,
+      });
+
       kyc.status = "approved";
-      await User.findByIdAndUpdate(kyc.userId, { role: "practitioner" });
-    } else if (action === "reject") {
-      kyc.status = "rejected";
-    } else {
-      return res.status(400).json({ success: false, message: "Invalid action" });
+      kyc.reviewedAt = new Date();
+      kyc.reviewedBy = req.user.id;
+      kyc.userId = newUser._id;
+      await kyc.save();
+
+      sendEmail(
+        kyc.email,
+        "KYC Approved",
+        "Your KYC has been approved. Welcome to HealthMe as a verified practitioner!"
+      );
+
+      return res.json({ success: true, message: "KYC approved and practitioner account created.", data: kyc });
     }
 
-    kyc.adminNote = adminNote || "";
-    kyc.reviewedAt = new Date();
-    await kyc.save();
+    if (action === "reject") {
+      kyc.status = "rejected";
+      kyc.adminNote = note || "";
+      kyc.reviewedAt = new Date();
+      kyc.reviewedBy = req.user.id;
+      await kyc.save();
 
-    res.status(200).json({ success: true, message: KYC `${action}d successfully, data: kyc `});
+      sendEmail(
+        kyc.email,
+        "KYC Rejected",
+        `Your KYC was rejected. Reason: ${note || "See admin portal for more info."}`
+      );
+
+      return res.json({ success: true, message: "KYC rejected.", data: kyc });
+    }
+
+    return res.status(400).json({ success: false, message: "Invalid action" });
   } catch (err) {
-    console.error("Update KYC status error:", err);
-    res.status(500).json({ success: false, message: "Failed to update KYC status" });
+    console.error("adminReviewKyc error:", err);
+    res.status(500).json({ success: false, message: "Server error reviewing KYC" });
+  }
+};
+// ✅ GET /api/kyc/me
+exports.getMyKyc = async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId)
+      return res.status(401).json({ success: false, message: "Unauthorized" });
+
+    // Find user's KYC record
+    let kyc = await KYC.findOne({ userId });
+
+    // If KYC doesn't exist yet, create a placeholder with status "pending_payment"
+    if (!kyc) {
+      kyc = await KYC.create({
+        userId,
+        status: "pending_payment",
+      });
+    }
+
+    // Optional: also include limited user data (like email, name)
+    const user = await User.findById(userId).select("fullName email role");
+
+    return res.status(200).json({
+      success: true,
+      status: kyc.status || "pending_payment",
+      data: {
+        kyc,
+        user,
+      },
+    });
+  } catch (err) {
+    console.error("getMyKyc error:", err);
+    return res
+      .status(500)
+      .json({ success: false, message: "Server error while fetching KYC" });
   }
 };

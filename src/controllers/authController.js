@@ -1,4 +1,3 @@
-// src/controllers/authController.js
 const { validationResult } = require("express-validator");
 const bcrypt = require("bcryptjs");
 const User = require("../models/User");
@@ -17,13 +16,13 @@ const setCookie = (res, token) => {
 };
 
 /* =====================================================
-   👤 REGISTER USER / PRACTITIONER / ADMIN
+   👤 REGISTER USER (PATIENT ONLY)
+   Practitioners are NOT created yet — they go to /terms&sub first.
 ===================================================== */
 exports.register = async (req, res) => {
   const errors = validationResult(req);
-  if (!errors.isEmpty()) {
+  if (!errors.isEmpty())
     return res.status(400).json({ success: false, errors: errors.array() });
-  }
 
   try {
     const {
@@ -35,13 +34,35 @@ exports.register = async (req, res) => {
       gender,
       country,
       reasonForJoining,
-      role, // user | practitioner | admin
+      role,
     } = req.body;
 
-    // check if user exists
+    // if practitioner → skip DB creation for now
+    if (role === "practitioner") {
+      return res.status(200).json({
+        success: true,
+        message: "Proceed to subscription before completing signup.",
+        nextStep: "/practitioners/terms&sub",
+        tempUser: {
+          fullName,
+          email,
+          password, // frontend can re-hash later if you want
+          phone,
+          age,
+          gender,
+          country,
+          reasonForJoining,
+          role,
+        },
+      });
+    }
+
+    // ✅ For normal patient registration:
     const existingUser = await User.findOne({ email });
     if (existingUser)
-      return res.status(400).json({ success: false, message: "Email already exists" });
+      return res
+        .status(400)
+        .json({ success: false, message: "Email already exists" });
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
@@ -54,20 +75,15 @@ exports.register = async (req, res) => {
       gender,
       country,
       reasonForJoining,
-      role: role || "user",
+      role: "patient",
     });
 
     const token = generateToken({ id: user._id, role: user.role });
     setCookie(res, token);
 
-    // dynamic redirect
-    let redirectUrl = "/";
-    if (user.role === "admin") redirectUrl = "/admin/dashboard";
-    else if (user.role === "practitioner") redirectUrl = "/practitioner/dashboard";
-
-    res.status(201).json({
+    return res.status(201).json({
       success: true,
-      message: "Registration successful",
+      message: "Patient registered successfully.",
       user: {
         id: user._id,
         fullName: user.fullName,
@@ -75,39 +91,48 @@ exports.register = async (req, res) => {
         role: user.role,
       },
       token,
-      redirectUrl,
+      redirectUrl: "/login",
     });
   } catch (error) {
     console.error("Register error:", error);
-    res.status(500).json({ success: false, message: "Server error during registration" });
+    res
+      .status(500)
+      .json({ success: false, message: "Server error during registration" });
   }
 };
 
 /* =====================================================
-   🔐 LOGIN USER / PRACTITIONER / ADMIN
+   🔐 LOGIN (All users)
 ===================================================== */
 exports.login = async (req, res) => {
   try {
     const { email, password } = req.body;
     if (!email || !password)
-      return res.status(400).json({ success: false, message: "Email and password required" });
+      return res
+        .status(400)
+        .json({ success: false, message: "Email and password required" });
 
     const user = await User.findOne({ email });
     if (!user)
-      return res.status(400).json({ success: false, message: "Invalid credentials" });
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid credentials" });
 
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch)
-      return res.status(400).json({ success: false, message: "Invalid credentials" });
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid credentials" });
 
     const token = generateToken({ id: user._id, role: user.role });
     setCookie(res, token);
 
     let redirectUrl = "/";
     if (user.role === "admin") redirectUrl = "/dashboard/admin";
-    else if (user.role === "practitioner") redirectUrl = "/dashboard/practitioner";
+    else if (user.role === "practitioner")
+      redirectUrl = "/dashboard/practitioner";
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       message: "Login successful",
       user: {
@@ -121,7 +146,9 @@ exports.login = async (req, res) => {
     });
   } catch (error) {
     console.error("Login error:", error);
-    res.status(500).json({ success: false, message: "Server error during login" });
+    res
+      .status(500)
+      .json({ success: false, message: "Server error during login" });
   }
 };
 

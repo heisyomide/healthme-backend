@@ -1,105 +1,63 @@
 const express = require("express");
+const router = express.Router();
 const multer = require("multer");
 const path = require("path");
-const fs = require("fs");
-const KYC = require("../models/KYC");
-const { verifyToken } = require("../middlewares/authMiddleware");
+const { verifyToken, protectAdmin } = require("../controllers/authController");
+const kycController = require("../controllers/kycController");
 
-const router = express.Router();
-
-/* -------------------------------------------
-   🗂 Ensure Upload Folder Exists
-------------------------------------------- */
-const uploadDir = path.join(__dirname, "../../uploads/kyc");
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true });
-}
-
-/* -------------------------------------------
-   📸 Multer File Upload Setup
-------------------------------------------- */
+/* =====================================================
+   🗂 Multer Configuration — File Uploads
+===================================================== */
 const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, uploadDir),
+  destination: (req, file, cb) => {
+    cb(null, "uploads/kyc");
+  },
   filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
-    cb(null, `${uniqueSuffix}${path.extname(file.originalname)}`);
+    const ext = path.extname(file.originalname);
+    const uniqueName = `${req.user.id}-${Date.now()}${ext};`
+    cb(null, uniqueName);
   },
 });
 
 const upload = multer({
   storage,
-  limits: { fileSize: 5 * 1024 * 1024 }, // Max 5MB file
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB max per file
   fileFilter: (req, file, cb) => {
-    const allowed = [".jpg", ".jpeg", ".png", ".pdf"];
+    const allowed = [".png", ".jpg", ".jpeg", ".pdf"];
     const ext = path.extname(file.originalname).toLowerCase();
     if (!allowed.includes(ext)) {
-      return cb(new Error("Only JPG, PNG, or PDF files are allowed"));
+      return cb(new Error("Only PNG, JPG, JPEG, or PDF files are allowed"));
     }
     cb(null, true);
   },
 });
 
-/* -------------------------------------------
-   🧾 Submit KYC Info (Practitioners Only)
-------------------------------------------- */
+/* =====================================================
+   👤 Practitioner Routes (User Access)
+===================================================== */
+
+// ✅ Get current user’s KYC status
+router.get("/me", verifyToken, kycController.getMyKyc);
+
+// ✅ Submit or update KYC details
+router.post("/save", verifyToken, kycController.createOrUpdateKyc);
+
+// ✅ Upload KYC document (ID, license, or certificate)
 router.post(
-  "/submit",
+  "/upload",
   verifyToken,
-  upload.single("certificate"),
-  async (req, res) => {
-    try {
-      const { specialization, licenseNumber, yearsOfExperience, bio } = req.body;
-
-      // ✅ Validate required fields
-      if (!specialization || !licenseNumber || !yearsOfExperience || !bio) {
-        return res.status(400).json({ message: "All fields are required" });
-      }
-
-      // ✅ Prevent duplicate submission
-      const existingKyc = await KYC.findOne({ userId: req.user.id });
-      if (existingKyc) {
-        return res.status(400).json({ message: "KYC already submitted" });
-      }
-
-      const kyc = new KYC({
-        userId: req.user.id,
-        specialization,
-        licenseNumber,
-        yearsOfExperience,
-        bio,
-        certification: req.file
-          ? `/uploads/kyc/${req.file.filename}`
-          : null,
-        status: "pending",
-      });
-
-      await kyc.save();
-
-      res.status(201).json({
-        message: "✅ KYC submitted successfully, awaiting admin approval",
-        kyc,
-      });
-    } catch (err) {
-      console.error("KYC Submission Error:", err);
-      res.status(500).json({ message: "Server error, please try again later" });
-    }
-  }
+  upload.single("file"),
+  kycController.uploadDocument
 );
 
-/* -------------------------------------------
-   🧠 Get Current User’s KYC Status
-------------------------------------------- */
-router.get("/status", verifyToken, async (req, res) => {
-  try {
-    const kyc = await KYC.findOne({ userId: req.user.id });
-    if (!kyc) {
-      return res.status(404).json({ message: "No KYC record found" });
-    }
-    res.json(kyc);
-  } catch (err) {
-    console.error("KYC Fetch Error:", err);
-    res.status(500).json({ message: "Failed to fetch KYC data" });
-  }
-});
+/* =====================================================
+   🧑‍💼 Admin Routes (Protected)
+===================================================== */
+
+// ✅ Get all KYCs (for admin dashboard)
+router.get("/admin/all", protectAdmin, kycController.adminListKycs);
+
+// ✅ Review KYC: approve, reject, or confirm payment
+router.post("/admin/review/:id", protectAdmin, kycController.adminReviewKyc);
 
 module.exports = router;
