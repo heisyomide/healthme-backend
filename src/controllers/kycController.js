@@ -177,27 +177,27 @@ exports.getMyKyc = async (req, res) => {
     if (!userId)
       return res.status(401).json({ success: false, message: "Unauthorized" });
 
-    // Find user's KYC record
+    // Try to find the user's KYC
     let kyc = await KYC.findOne({ userId });
 
-    // If KYC doesn't exist yet, create a placeholder with status "pending_payment"
+    // If KYC doesn’t exist yet, create a placeholder (skip validation)
     if (!kyc) {
-      kyc = await KYC.create({
+      kyc = new KYC({
         userId,
         status: "pending_payment",
       });
+
+      // 🚨 This is the important line — skip validation for missing required fields
+      await kyc.save({ validateBeforeSave: false });
     }
 
-    // Optional: also include limited user data (like email, name)
+    // Also get basic user info
     const user = await User.findById(userId).select("fullName email role");
 
     return res.status(200).json({
       success: true,
       status: kyc.status || "pending_payment",
-      data: {
-        kyc,
-        user,
-      },
+      data: { kyc, user },
     });
   } catch (err) {
     console.error("getMyKyc error:", err);
