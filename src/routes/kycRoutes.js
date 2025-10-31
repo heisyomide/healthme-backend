@@ -2,7 +2,7 @@ const express = require("express");
 const router = express.Router();
 const multer = require("multer");
 const path = require("path");
-const { verifyToken, protectAdmin } = require("../controllers/authController");
+const { verifyToken, protectAdmin } = require("../middlewares/authMiddleware");
 const kycController = require("../controllers/kycController");
 
 /* =====================================================

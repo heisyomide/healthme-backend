@@ -17,7 +17,6 @@ const setCookie = (res, token) => {
 
 /* =====================================================
    👤 REGISTER USER (PATIENT ONLY)
-   Practitioners are NOT created yet — they go to /terms&sub first.
 ===================================================== */
 exports.register = async (req, res) => {
   const errors = validationResult(req);
@@ -37,8 +36,8 @@ exports.register = async (req, res) => {
       role,
     } = req.body;
 
-    // if practitioner → skip DB creation for now
     if (role === "practitioner") {
+      // Don’t create DB record yet — practitioner goes to subscription page
       return res.status(200).json({
         success: true,
         message: "Proceed to subscription before completing signup.",
@@ -46,7 +45,7 @@ exports.register = async (req, res) => {
         tempUser: {
           fullName,
           email,
-          password, // frontend can re-hash later if you want
+          password,
           phone,
           age,
           gender,
@@ -57,7 +56,7 @@ exports.register = async (req, res) => {
       });
     }
 
-    // ✅ For normal patient registration:
+    // ✅ Normal patient registration:
     const existingUser = await User.findOne({ email });
     if (existingUser)
       return res
@@ -81,7 +80,7 @@ exports.register = async (req, res) => {
     const token = generateToken({ id: user._id, role: user.role });
     setCookie(res, token);
 
-    return res.status(201).json({
+    res.status(201).json({
       success: true,
       message: "Patient registered successfully.",
       user: {
@@ -102,7 +101,93 @@ exports.register = async (req, res) => {
 };
 
 /* =====================================================
-   🔐 LOGIN (All users)
+   🧩 STEP 1 — START PRACTITIONER REGISTRATION
+===================================================== */
+exports.startRegistration = async (req, res) => {
+  try {
+    const { fullName, email, password, phone, country, gender, age } = req.body;
+
+    if (!email || !password || !fullName)
+      return res
+        .status(400)
+        .json({ success: false, message: "Missing required fields" });
+
+    // Ensure user doesn’t already exist
+    const existing = await User.findOne({ email });
+    if (existing)
+      return res
+        .status(400)
+        .json({ success: false, message: "Email already exists" });
+
+    // Step 1 doesn’t save to DB yet, frontend holds state until payment
+    res.json({
+      success: true,
+      message: "Registration step 1 complete. Proceed to payment.",
+      tempData: { fullName, email, password, phone, country, gender, age },
+    });
+  } catch (err) {
+    console.error("startRegistration error:", err);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
+/* =====================================================
+   💳 STEP 2 — CONFIRM PAYMENT & CREATE PRACTITIONER
+===================================================== */
+exports.confirmPayment = async (req, res) => {
+  try {
+    const { fullName, email, password, phone, age, gender, country } = req.body;
+
+    if (!email || !password)
+      return res
+        .status(400)
+        .json({ success: false, message: "Missing required fields" });
+
+    // Check if user exists
+    const existing = await User.findOne({ email });
+    if (existing)
+      return res
+        .status(400)
+        .json({ success: false, message: "Email already exists" });
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // Create practitioner user
+    const user = await User.create({
+      fullName,
+      email,
+      password: hashedPassword,
+      phone,
+      age,
+      gender,
+      country,
+      role: "practitioner",
+      isPractitionerPaid: true,
+    });
+
+    const token = generateToken({ id: user._id, role: user.role });
+    setCookie(res, token);
+
+    res.status(201).json({
+      success: true,
+      message: "Payment confirmed. Practitioner account created successfully.",
+      user: {
+        id: user._id,
+        fullName: user.fullName,
+        email: user.email,
+        role: user.role,
+      },
+      token,
+      redirectUrl: "/kyc",
+    });
+  } catch (err) {
+    console.error("confirmPayment error:", err);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
+/* =====================================================
+   🔐 LOGIN
 ===================================================== */
 exports.login = async (req, res) => {
   try {
@@ -132,7 +217,7 @@ exports.login = async (req, res) => {
     else if (user.role === "practitioner")
       redirectUrl = "/dashboard/practitioner";
 
-    return res.status(200).json({
+    res.status(200).json({
       success: true,
       message: "Login successful",
       user: {
