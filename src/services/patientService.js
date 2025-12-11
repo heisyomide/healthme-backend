@@ -1,8 +1,8 @@
 // src/services/patientService.js
 const Patient = require('../models/patient_temp');
 const Appointment = require('../models/Appointment');
-const ClinicalNote = require('../models/ClinicalNote');
-const Prescription = require('../models/Prescription');
+const ClinicalNote = require('../models/clinical');
+const Prescription = require('../models/Prescription_temp');
 
 /**
  * Retrieves a patient's entire medical record bundle.

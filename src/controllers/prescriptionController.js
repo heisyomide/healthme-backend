@@ -1,8 +1,8 @@
 // src/controllers/prescriptionController.js
-const Prescription = require("../models/Prescription");
+const Prescription = require("../models/Prescription_temp");
 const Patient = require("../models/patient_temp");
 const Practitioner = require("../models/Practitioner");
-const ClinicalNote = require("../models/ClinicalNote");
+const ClinicalNote = require("../models/clinical");
 const mongoose = require("mongoose");
 
 /* =====================================================

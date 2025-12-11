@@ -1,5 +1,5 @@
 // src/controllers/clinicalNoteController.js
-const ClinicalNote = require("../models/ClinicalNote");
+const ClinicalNote = require("../models/clinical");
 const Appointment = require("../models/Appointment");
 
 /* =====================================================
