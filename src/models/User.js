@@ -1,81 +1,85 @@
+// src/models/User.js
 const mongoose = require("mongoose");
 const bcrypt = require("bcryptjs");
 
-const UserSchema = new mongoose.Schema(
+const userSchema = new mongoose.Schema(
   {
-    /* =====================================================
-       👤 Basic Account Info
-    ===================================================== */
-    fullName: { type: String, required: true },
-    email: {
-      type: String,
-      required: true,
-      unique: true,
-      lowercase: true,
+    // --- Core Authentication ---
+    email: { 
+      type: String, 
+      required: true, 
+      unique: true, 
+      lowercase: true, 
+      trim: true 
     },
-    password: { type: String, required: true, minlength: 6 },
-
-    /* =====================================================
-       📱 Optional Profile Info
-    ===================================================== */
-    phone: { type: String },
-    age: { type: Number },
-    gender: { type: String, enum: ["male", "female", "other"] },
-    country: { type: String },
-    reasonForJoining: { type: String },
-
-    /* =====================================================
-       ⚙ Role Management
-    ===================================================== */
+    password: { 
+      type: String, 
+      required: true 
+    },
+    
+    // --- Role Identification ---
     role: {
       type: String,
-      enum: ["user", "practitioner", "admin"],
-      default: "user",
+      required: true,
+      enum: ["patient", "practitioner", "admin"],
+      default: "patient",
     },
 
-    /* =====================================================
-       🧾 Practitioner Verification Flags
-    ===================================================== */
-    isKycSubmitted: { type: Boolean, default: false },
-    isKycApproved: { type: Boolean, default: false },
-    isVerifiedPractitioner: { type: Boolean, default: false },
-    isPractitionerPaid: { type: Boolean, default: false },
-
-    /* =====================================================
-       🔗 Relations
-    ===================================================== */
-    kycId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "KYC",
+    // --- References to Specialized Profiles (for quick lookup) ---
+    // These fields allow us to easily find the full profile data based on the role
+    patientProfile: { 
+      type: mongoose.Schema.Types.ObjectId, 
+      ref: "Patient", 
+      required: false, 
+      unique: true,
+      sparse: true 
+    },
+    practitionerProfile: { 
+      type: mongoose.Schema.Types.ObjectId, 
+      ref: "Practitioner", 
+      required: false, 
+      unique: true,
+      sparse: true 
+    },
+    adminProfile: { 
+      type: mongoose.Schema.Types.ObjectId, 
+      ref: "Admin", 
+      required: false, 
+      unique: true,
+      sparse: true 
     },
 
-    /* =====================================================
-       🕓 Meta
-    ===================================================== */
-    lastLogin: { type: Date },
-    resetToken: { type: String },
-    resetTokenExpiry: { type: Date },
+    // --- Basic Information (often duplicated in profile for convenience) ---
+    fullName: { 
+      type: String, 
+      required: true, 
+      trim: true 
+    },
+    isActive: {
+      type: Boolean,
+      default: true
+    }
   },
-  {
-    timestamps: true, // Automatically adds createdAt & updatedAt
-  }
+  { timestamps: true }
 );
 
-/* =====================================================
-   🔐 Password Hash Middleware
-===================================================== */
-UserSchema.pre("save", async function (next) {
+// Hash password before saving (same as previous models)
+userSchema.pre("save", async function (next) {
   if (!this.isModified("password")) return next();
-  const salt = await bcrypt.genSalt(10);
-  this.password = await bcrypt.hash(this.password, salt);
+  this.password = await bcrypt.hash(this.password, 10);
   next();
 });
 
-/* =====================================================
-   🔍 Compare Password Method
-===================================================== */
-UserSchema.methods.matchPassword = async function (enteredPassword) {
+// Compare password
+userSchema.methods.matchPassword = async function (enteredPassword) {
   return await bcrypt.compare(enteredPassword, this.password);
 };
 
-module.exports = mongoose.model("User", UserSchema);
+// Hide password in responses
+userSchema.methods.toJSON = function () {
+  const obj = this.toObject();
+  delete obj.password;
+  return obj;
+};
+
+module.exports = mongoose.model("User", userSchema);

@@ -1,179 +1,162 @@
-const mongoose = require("mongoose");
-const User = require("../models/User");
+// src/controllers/patientController.js
+const Patient = require("../models/Patient");
+const User = require("../models/User"); // To potentially update core user status
 const Appointment = require("../models/Appointment");
-const TreatmentPlan = require("../models/TreatmentPlan");
-const Medicine = require("../models/Medicine");
-const Metrics = require("../models/Metrics");
-const Report = require("../models/Report");
-const HealthProgress = require("../models/HealthProgress");
+const ClinicalNote = require("../models/ClinicalNote");
+const Prescription = require("../models/Prescription");
+const mongoose = require("mongoose");
+const { validationResult } = require("express-validator");
 
-function getUserId(req) {
-  if (req.user && req.user.id) return req.user.id;
-  if (req.query && req.query.userId) return req.query.userId;
-  return null;
-}
-
-// Helper to validate ObjectId format
-function isValidObjectId(id) {
-  return mongoose.Types.ObjectId.isValid(id);
-}
+/* =====================================================
+   1. GET AUTHENTICATED PATIENT PROFILE
+===================================================== */
 
 /**
- * GET /api/patient/metrics
+ * @desc Get the profile of the authenticated patient
+ * @route GET /api/v1/patients/me
+ * @access Private/Patient
  */
-exports.getMetrics = async (req, res) => {
+exports.getPatientProfile = async (req, res) => {
   try {
-    const userId = getUserId(req);
-    if (!userId)
-      return res.status(400).json({ success: false, message: "User ID missing" });
-    if (!isValidObjectId(userId))
-      return res.status(400).json({ success: false, message: "Invalid User ID format" });
+    // profileId is the ID of the Patient document, assigned during login
+    const patientId = req.user.profileId; 
 
-    const metrics = await Metrics.findOne({ patient: userId })
-      .sort({ createdAt: -1 })
+    const patient = await Patient.findById(patientId)
+      // Optional: Populate the core User and Verification record for status checks
+      // .populate('verification') 
       .lean();
 
-    return res.json({ success: true, data: metrics || {} });
-  } catch (err) {
-    console.error("getMetrics error:", err);
-    return res.status(500).json({ success: false, message: "Server error" });
+    if (!patient) {
+      return res.status(404).json({ success: false, message: "Patient profile not found." });
+    }
+
+    res.status(200).json({
+      success: true,
+      data: patient,
+    });
+  } catch (error) {
+    console.error("getPatientProfile error:", error);
+    res.status(500).json({ success: false, message: "Server error fetching profile." });
   }
 };
 
+/* =====================================================
+   2. UPDATE PATIENT PROFILE
+===================================================== */
+
 /**
- * GET /api/patient/appointments
+ * @desc Update the profile of the authenticated patient (demographics, contact info)
+ * @route PUT /api/v1/patients/me
+ * @access Private/Patient
  */
-exports.getAppointments = async (req, res) => {
+exports.updatePatientProfile = async (req, res) => {
   try {
-    const userId = getUserId(req);
-    if (!userId)
-      return res.status(400).json({ success: false, message: "User ID missing" });
-    if (!isValidObjectId(userId))
-      return res.status(400).json({ success: false, message: "Invalid User ID format" });
+    const patientId = req.user.profileId;
+    const updates = req.body;
+    
+    // Disallow updates to protected fields (like MRN or verification status)
+    delete updates.medicalRecordNumber; 
+    delete updates.isVerified;
 
-    const appointments = await Appointment.find({
-      patient: userId,
-      date: { $gte: new Date(new Date().setHours(0, 0, 0, 0)) },
-    })
-      .populate("practitioner", "fullName profilePicture specialization")
-      .sort({ date: 1 })
-      .lean();
+    const patient = await Patient.findByIdAndUpdate(
+      patientId,
+      { $set: updates },
+      { new: true, runValidators: true }
+    ).lean();
 
-    return res.json({ success: true, data: { appointments } });
-  } catch (err) {
-    console.error("getAppointments error:", err);
-    return res.status(500).json({ success: false, message: "Server error" });
+    if (!patient) {
+      return res.status(404).json({ success: false, message: "Patient profile not found." });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Profile updated successfully.",
+      data: patient,
+    });
+  } catch (error) {
+    console.error("updatePatientProfile error:", error);
+    res.status(500).json({ success: false, message: "Server error updating profile." });
   }
 };
 
+/* =====================================================
+   3. GET MEDICAL HISTORY (Comprehensive Record)
+===================================================== */
+
 /**
- * GET /api/patient/summary
+ * @desc Get all medical records (notes, prescriptions) for the authenticated patient
+ * @route GET /api/v1/patients/me/history
+ * @access Private/Patient
  */
-exports.getSummary = async (req, res) => {
+exports.getMedicalHistory = async (req, res) => {
   try {
-    const userId = getUserId(req);
-    if (!userId)
-      return res.status(400).json({ success: false, message: "User ID missing" });
-    if (!isValidObjectId(userId))
-      return res.status(400).json({ success: false, message: "Invalid User ID format" });
+    const patientId = req.user.profileId;
 
-    const summary = await Metrics.findOne({ patient: userId })
-      .sort({ createdAt: -1 })
-      .select("heartRate systolic vrSessions")
-      .lean();
+    // 1. Fetch Appointments
+    const appointments = await Appointment.find({ patient: patientId })
+      .populate('practitioner', 'fullName specialty')
+      .sort({ date: -1 });
 
-    return res.json({ success: true, data: summary || {} });
-  } catch (err) {
-    console.error("getSummary error:", err);
-    return res.status(500).json({ success: false, message: "Server error" });
+    // 2. Fetch Clinical Notes
+    const clinicalNotes = await ClinicalNote.find({ patient: patientId })
+      .populate('practitioner', 'fullName specialty')
+      .sort({ noteDate: -1 });
+
+    // 3. Fetch Prescriptions
+    const prescriptions = await Prescription.find({ patient: patientId })
+      .populate('practitioner', 'fullName specialty')
+      .sort({ prescriptionDate: -1 });
+
+    res.status(200).json({
+      success: true,
+      data: {
+        appointments,
+        clinicalNotes,
+        prescriptions,
+      },
+    });
+  } catch (error) {
+    console.error("getMedicalHistory error:", error);
+    res.status(500).json({ success: false, message: "Server error fetching history." });
   }
 };
 
-/**
- * GET /api/patient/health-progress
- */
-exports.getHealthProgress = async (req, res) => {
-  try {
-    const userId = getUserId(req);
-    if (!userId)
-      return res.status(400).json({ success: false, message: "User ID missing" });
-    if (!isValidObjectId(userId))
-      return res.status(400).json({ success: false, message: "Invalid User ID format" });
-
-    const progress = await HealthProgress.findOne({ patient: userId })
-      .sort({ createdAt: -1 })
-      .lean();
-
-    return res.json({ success: true, data: progress || {} });
-  } catch (err) {
-    console.error("getHealthProgress error:", err);
-    return res.status(500).json({ success: false, message: "Server error" });
-  }
-};
+/* =====================================================
+   4. ADMIN/PRACTITIONER ACCESS (By Patient ID)
+===================================================== */
 
 /**
- * GET /api/patient/report
+ * @desc Get a specific patient's profile by ID
+ * @route GET /api/v1/patients/:id
+ * @access Private/Practitioner, Admin
  */
-exports.getReport = async (req, res) => {
+exports.getPatientProfileById = async (req, res) => {
   try {
-    const userId = getUserId(req);
-    if (!userId)
-      return res.status(400).json({ success: false, message: "User ID missing" });
-    if (!isValidObjectId(userId))
-      return res.status(400).json({ success: false, message: "Invalid User ID format" });
+    const patientId = req.params.id;
+    const requestingUserRole = req.user.role;
 
-    const report = await Report.find({ patient: userId })
-      .sort({ createdAt: 1 })
-      .select("label value")
+    // Security Check: Only Practitioner or Admin can access by ID
+    if (requestingUserRole !== 'practitioner' && requestingUserRole !== 'admin') {
+      return res.status(403).json({ success: false, message: "Unauthorized access." });
+    }
+
+    const patient = await Patient.findById(patientId)
+      .select('-password') // Ensure no sensitive credentials are leaked
       .lean();
 
-    return res.json({ success: true, data: { report } });
-  } catch (err) {
-    console.error("getReport error:", err);
-    return res.status(500).json({ success: false, message: "Server error" });
-  }
-};
+    if (!patient) {
+      return res.status(404).json({ success: false, message: "Patient profile not found." });
+    }
 
-/**
- * GET /api/patient/treatment
- */
-exports.getTreatment = async (req, res) => {
-  try {
-    const userId = getUserId(req);
-    if (!userId)
-      return res.status(400).json({ success: false, message: "User ID missing" });
-    if (!isValidObjectId(userId))
-      return res.status(400).json({ success: false, message: "Invalid User ID format" });
-
-    const plan = await TreatmentPlan.findOne({ patient: userId })
-      .sort({ createdAt: -1 })
-      .lean();
-
-    return res.json({ success: true, data: plan || {} });
-  } catch (err) {
-    console.error("getTreatment error:", err);
-    return res.status(500).json({ success: false, message: "Server error" });
-  }
-};
-
-/**
- * GET /api/patient/medicine
- */
-exports.getMedicine = async (req, res) => {
-  try {
-    const userId = getUserId(req);
-    if (!userId)
-      return res.status(400).json({ success: false, message: "User ID missing" });
-    if (!isValidObjectId(userId))
-      return res.status(400).json({ success: false, message: "Invalid User ID format" });
-
-    const med = await Medicine.find({ patient: userId })
-      .sort({ createdAt: -1 })
-      .lean();
-
-    return res.json({ success: true, data: { medicine: med } });
-  } catch (err) {
-    console.error("getMedicine error:", err);
-    return res.status(500).json({ success: false, message: "Server error" });
+    // Optional Security: If req.user.role === 'practitioner', you might only allow access
+    // if the practitioner has a current or past appointment with this patient.
+    
+    res.status(200).json({
+      success: true,
+      data: patient,
+    });
+  } catch (error) {
+    console.error("getPatientProfileById error:", error);
+    res.status(500).json({ success: false, message: "Server error fetching patient profile." });
   }
 };

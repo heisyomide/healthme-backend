@@ -1,29 +1,51 @@
+// src/models/Practitioner.js
 const mongoose = require("mongoose");
-const Schema = mongoose.Schema;
+const bcrypt = require("bcryptjs");
 
-const practitionerSchema = new mongoose.Schema({
-  user: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
-  fullName: { type: String, required: true },
-  email: { type: String, required: true },
-  specialization: { type: String },
-  focus: { type: String },
-  bio: { type: String },
-  experienceYears: { type: Number, default: 0 },
-  profilePicture: { type: String },
-  location: { type: String },
-  availability: [
-    {
-      day: { type: String }, // e.g. "Monday"
-      from: { type: String }, // e.g. "09:00"
-      to: { type: String },   // e.g. "17:00"
-    },
-  ],
-  ratings: {
-    average: { type: Number, default: 0 },
-    count: { type: Number, default: 0 },
+const practitionerSchema = new mongoose.Schema(
+  {
+    // --- Identification and Authentication (Standard User Fields) ---
+    fullName: { type: String, required: true, trim: true },
+    email: { type: String, required: true, unique: true, lowercase: true },
+    password: { type: String, required: true },
+    role: { type: String, default: "practitioner", enum: ["practitioner", "doctor", "nurse", "specialist"] },
+
+    // --- Professional Details (Specific to Practitioner) ---
+    specialty: { type: String, required: true, trim: true },
+    licenseNumber: { type: String, required: true, unique: true },
+    npiNumber: { type: String, unique: true, sparse: true }, // National Provider Identifier (US-specific)
+    yearsOfExperience: { type: Number, default: 0, min: 0 },
+    hospitalAffiliation: { type: String, trim: true },
+
+    // --- Availability/Scheduling ---
+    // A simple array of working days/time blocks can be added here, 
+    // but complex scheduling is often handled separately.
+    workingDays: [{ 
+      type: String, 
+      enum: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"] 
+    }],
+    
+    // An array of clinic locations, if applicable
+    locations: [{ type: String, trim: true }]
   },
-  isActive: { type: Boolean, default: true }, // Only active ones are shown publicly
+  { timestamps: true }
+);
+
+// Add same pre-save hash and password comparison methods as in Admin.js
+practitionerSchema.pre("save", async function (next) {
+  if (!this.isModified("password")) return next();
+  this.password = await bcrypt.hash(this.password, 10);
+  next();
 });
 
-// ✅ FIX: Export the model
+practitionerSchema.methods.matchPassword = async function (enteredPassword) {
+  return await bcrypt.compare(enteredPassword, this.password);
+};
+
+practitionerSchema.methods.toJSON = function () {
+  const obj = this.toObject();
+  delete obj.password;
+  return obj;
+};
+
 module.exports = mongoose.model("Practitioner", practitionerSchema);

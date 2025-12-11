@@ -1,17 +1,15 @@
-// src/models/SupportMessage.js
 const mongoose = require("mongoose");
-const Schema = mongoose.Schema;
 
-const SupportSchema = new Schema({
-  userId: { type: Schema.Types.ObjectId, ref: "User" },
-  subject: String,
-  message: String,
+const SupportSchema = new mongoose.Schema({
+  senderId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+  senderName: { type: String },
+  content: { type: String },
   status: { type: String, enum: ["open", "answered", "closed"], default: "open" },
   responses: [
     {
-      adminId: { type: Schema.Types.ObjectId, ref: "User" },
-      message: String,
-      at: Date,
+      adminId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+      message: { type: String },
+      at: { type: Date, default: Date.now },
     },
   ],
 }, { timestamps: true });

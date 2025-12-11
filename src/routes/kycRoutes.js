@@ -1,63 +1,66 @@
+// src/routes/verificationRoutes.js
 const express = require("express");
 const router = express.Router();
-const multer = require("multer");
-const path = require("path");
-const { verifyToken, protectAdmin } = require("../middlewares/authMiddleware");
-const kycController = require("../controllers/kycController");
+
+// --- Import Middleware ---
+const { protect, authorize } = require("../middlewares/authMiddleware");
+const upload = require("../config/multer"); // Assuming you have a Multer configuration for file uploads
+
+// --- Import Controllers ---
+const verificationController = require("../controllers/verificationController");
+
+// Middleware stack for all authenticated user routes
+const AUTH_USER = [protect];
+
 
 /* =====================================================
-   🗂 Multer Configuration — File Uploads
-===================================================== */
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, "uploads/kyc");
-  },
-  filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname);
-    const uniqueName = `${req.user.id}-${Date.now()}${ext};`
-    cb(null, uniqueName);
-  },
-});
-
-const upload = multer({
-  storage,
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB max per file
-  fileFilter: (req, file, cb) => {
-    const allowed = [".png", ".jpg", ".jpeg", ".pdf"];
-    const ext = path.extname(file.originalname).toLowerCase();
-    if (!allowed.includes(ext)) {
-      return cb(new Error("Only PNG, JPG, JPEG, or PDF files are allowed"));
-    }
-    cb(null, true);
-  },
-});
-
-/* =====================================================
-   👤 Practitioner Routes (User Access)
+   1. USER SELF-SERVICE ENDPOINTS (Patient & Practitioner)
 ===================================================== */
 
-// ✅ Get current user’s KYC status
-router.get("/me", verifyToken, kycController.getMyKyc);
-
-// ✅ Submit or update KYC details
-router.post("/save", verifyToken, kycController.createOrUpdateKyc);
-
-// ✅ Upload KYC document (ID, license, or certificate)
-router.post(
-  "/upload",
-  verifyToken,
-  upload.single("file"),
-  kycController.uploadDocument
+// @route GET /api/v1/verification/me
+// @desc Get the verification status and details for the authenticated user
+// @access Private/Authenticated User
+router.get(
+  "/me", 
+  AUTH_USER, 
+  verificationController.getMyVerification
 );
 
+// @route PUT /api/v1/verification/documents
+// @desc Upload a verification document (e.g., ID, license) and update the record status
+// @access Private/Authenticated User
+// The upload middleware handles the file saving and attaches details to req.file
+router.put(
+  "/documents", 
+  AUTH_USER, 
+  upload.single('document'), // Expecting one file with the field name 'document'
+  verificationController.uploadDocument
+);
+
+
 /* =====================================================
-   🧑‍💼 Admin Routes (Protected)
+   2. ADMIN REVIEW ENDPOINTS
+   (These routes are typically included in adminRoutes.js, 
+    but are listed here for clarity on the controller's use)
 ===================================================== */
 
-// ✅ Get all KYCs (for admin dashboard)
-router.get("/admin/all", protectAdmin, kycController.adminListKycs);
+// @route GET /api/v1/verification/admin/list
+// @desc Admin: Get all pending verification submissions for review
+// @access Private/Admin
+router.get(
+  "/admin/list", 
+  [protect, authorize(['admin'])], 
+  verificationController.adminListSubmissions
+);
 
-// ✅ Review KYC: approve, reject, or confirm payment
-router.post("/admin/review/:id", protectAdmin, kycController.adminReviewKyc);
+// @route PUT /api/v1/verification/admin/:id/review
+// @desc Admin: Approve or reject a specific verification record
+// @access Private/Admin
+router.put(
+  "/admin/:id/review", 
+  [protect, authorize(['admin'])], 
+  verificationController.adminReviewVerification
+);
+
 
 module.exports = router;
