@@ -1,7 +1,7 @@
 // src/services/authService.js
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
-const Patient = require('../models/patient');
+const Patient = require('../models/Patient');
 const Practitioner = require('../models/Practitioner');
 const generateToken = require('../utils/generateToken');
 const crypto = require('crypto');

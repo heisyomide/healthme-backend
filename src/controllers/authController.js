@@ -23,7 +23,7 @@ const { setAuthCookie } = require('../utils/generateToken'); // New helper funct
 
 // Model Imports
 const User = require("../models/User");
-const Patient = require("../models/patient");
+const Patient = require("../models/Patient");
 const Practitioner = require("../models/Practitioner");
 const Verification = require("../models/Verification");
 

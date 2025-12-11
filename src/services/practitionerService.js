@@ -1,7 +1,7 @@
 // src/services/practitionerService.js
 const Practitioner = require('../models/Practitioner');
 const Appointment = require('../models/Appointment');
-const Patient = require('../models/patient');
+const Patient = require('../models/Patient');
 
 /**
  * Calculates dashboard overview statistics for a practitioner.

@@ -1,6 +1,6 @@
 // src/services/adminService.js
 const User = require("../models/User");
-const Patient = require("../models/patient");
+const Patient = require("../models/Patient");
 const Practitioner = require("../models/Practitioner");
 const Appointment = require("../models/Appointment");
 const Verification = require("../models/Verification");

@@ -1,7 +1,7 @@
 // src/services/appointmentService.js
 const Appointment = require("../models/Appointment");
 const Practitioner = require("../models/Practitioner");
-const Patient = require("../models/patient");
+const Patient = require("../models/Patient");
 const mongoose = require("mongoose");
 
 /**

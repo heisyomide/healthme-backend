@@ -1,5 +1,5 @@
 // src/controllers/patientController.js
-const Patient = require("../models/patient");
+const Patient = require("../models/Patient");
 const User = require("../models/User"); // To potentially update core user status
 const Appointment = require("../models/Appointment");
 const ClinicalNote = require("../models/ClinicalNote");
