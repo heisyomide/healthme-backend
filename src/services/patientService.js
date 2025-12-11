@@ -1,5 +1,5 @@
 // src/services/patientService.js
-const Patient = require('../models/Patient');
+const Patient = require('../models/patient_temp');
 const Appointment = require('../models/Appointment');
 const ClinicalNote = require('../models/ClinicalNote');
 const Prescription = require('../models/Prescription');
