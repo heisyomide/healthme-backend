@@ -1,51 +1,83 @@
-// src/models/Practitioner.js
-const mongoose = require("mongoose");
-const bcrypt = require("bcryptjs");
+/**
+ * @file Practitioner.js
+ * @desc Mongoose schema for the Practitioner profile, containing professional
+ * details for doctors, nurses, therapists, etc.
+ */
+const mongoose = require('mongoose');
 
-const practitionerSchema = new mongoose.Schema(
-  {
-    // --- Identification and Authentication (Standard User Fields) ---
-    fullName: { type: String, required: true, trim: true },
-    email: { type: String, required: true, unique: true, lowercase: true },
-    password: { type: String, required: true },
-    role: { type: String, default: "practitioner", enum: ["practitioner", "doctor", "nurse", "specialist"] },
+const PractitionerSchema = new mongoose.Schema({
+    // Link to the core User model
+    user: {
+        type: mongoose.Schema.ObjectId,
+        ref: 'User',
+        required: [true, 'Practitioner must be linked to a core User account.'],
+        unique: true
+    },
 
-    // --- Professional Details (Specific to Practitioner) ---
-    specialty: { type: String, required: true, trim: true },
-    licenseNumber: { type: String, required: true, unique: true },
-    npiNumber: { type: String, unique: true, sparse: true }, // National Provider Identifier (US-specific)
-    yearsOfExperience: { type: Number, default: 0, min: 0 },
-    hospitalAffiliation: { type: String, trim: true },
+    fullName: {
+        type: String,
+        required: [true, 'Full name is required'],
+        trim: true,
+        maxlength: [100, 'Full name cannot be more than 100 characters']
+    },
 
-    // --- Availability/Scheduling ---
-    // A simple array of working days/time blocks can be added here, 
-    // but complex scheduling is often handled separately.
-    workingDays: [{ 
-      type: String, 
-      enum: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"] 
-    }],
+    specialty: {
+        type: String,
+        required: [true, 'Medical specialty is required'],
+        trim: true
+    },
+
+    // License/Certification details
+    licenseNumber: {
+        type: String,
+        required: [true, 'License number is required'],
+        unique: true,
+        trim: true
+    },
+
+    // Professional details
+    bio: {
+        type: String,
+        maxlength: 500,
+        default: 'Dedicated healthcare professional.'
+    },
     
-    // An array of clinic locations, if applicable
-    locations: [{ type: String, trim: true }]
-  },
-  { timestamps: true }
-);
+    // Array of locations this practitioner works at
+    locations: [{
+        type: mongoose.Schema.ObjectId,
+        ref: 'Location'
+    }],
 
-// Add same pre-save hash and password comparison methods as in Admin.js
-practitionerSchema.pre("save", async function (next) {
-  if (!this.isModified("password")) return next();
-  this.password = await bcrypt.hash(this.password, 10);
-  next();
+    // List of accepted insurances (can be a sub-document or external model later)
+    insuranceNetworks: [String],
+
+    // Working schedule or availability (can be complex, kept simple here)
+    availability: {
+        type: String,
+        default: 'Mon-Fri, 9am-5pm'
+    },
+
+    // Calculated fields
+    averageRating: {
+        type: Number,
+        default: 0,
+        min: [0, 'Rating must be at least 0'],
+        max: [5, 'Rating must be less than or equal to 5']
+    },
+    
+    // Status fields
+    isVerified: {
+        type: Boolean,
+        default: false // Requires admin approval
+    },
+
+    createdAt: {
+        type: Date,
+        default: Date.now
+    }
 });
 
-practitionerSchema.methods.matchPassword = async function (enteredPassword) {
-  return await bcrypt.compare(enteredPassword, this.password);
-};
+// Index to search practitioners by specialty and location
+PractitionerSchema.index({ specialty: 1, locations: 1 });
 
-practitionerSchema.methods.toJSON = function () {
-  const obj = this.toObject();
-  delete obj.password;
-  return obj;
-};
-
-module.exports = mongoose.model("Practitioner", practitionerSchema);
+module.exports = mongoose.model('Practitioner', PractitionerSchema);

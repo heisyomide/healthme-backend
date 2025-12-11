@@ -1,85 +1,74 @@
-// src/models/User.js
-const mongoose = require("mongoose");
-const bcrypt = require("bcryptjs");
+/**
+ * @file User.js
+ * @desc Mongoose schema for the core user account, handling authentication
+ * and linking to specific profile types (Patient, Practitioner, Admin).
+ */
+const mongoose = require('mongoose');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
 
-const userSchema = new mongoose.Schema(
-  {
-    // --- Core Authentication ---
-    email: { 
-      type: String, 
-      required: true, 
-      unique: true, 
-      lowercase: true, 
-      trim: true 
+const UserSchema = new mongoose.Schema({
+    email: {
+        type: String,
+        required: [true, 'Email is required'],
+        unique: true,
+        match: [
+            /^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/,
+            'Please add a valid email'
+        ]
     },
-    password: { 
-      type: String, 
-      required: true 
+    password: {
+        type: String,
+        required: [true, 'Password is required'],
+        minlength: 6,
+        select: false // Do not return password by default
     },
-    
-    // --- Role Identification ---
     role: {
-      type: String,
-      required: true,
-      enum: ["patient", "practitioner", "admin"],
-      default: "patient",
+        type: String,
+        enum: ['patient', 'practitioner', 'admin'],
+        default: 'patient'
     },
-
-    // --- References to Specialized Profiles (for quick lookup) ---
-    // These fields allow us to easily find the full profile data based on the role
-    patientProfile: { 
-      type: mongoose.Schema.Types.ObjectId, 
-      ref: "Patient", 
-      required: false, 
-      unique: true,
-      sparse: true 
+    // Reference to the specific profile model (Patient, Practitioner, or null for Admin)
+    profileId: {
+        type: mongoose.Schema.ObjectId,
+        required: false, // Required upon successful registration
+        default: null,
+        refPath: 'role' // Dynamically reference Patient or Practitioner model
     },
-    practitionerProfile: { 
-      type: mongoose.Schema.Types.ObjectId, 
-      ref: "Practitioner", 
-      required: false, 
-      unique: true,
-      sparse: true 
-    },
-    adminProfile: { 
-      type: mongoose.Schema.Types.ObjectId, 
-      ref: "Admin", 
-      required: false, 
-      unique: true,
-      sparse: true 
-    },
-
-    // --- Basic Information (often duplicated in profile for convenience) ---
-    fullName: { 
-      type: String, 
-      required: true, 
-      trim: true 
-    },
-    isActive: {
-      type: Boolean,
-      default: true
+    resetPasswordToken: String,
+    resetPasswordExpire: Date,
+    createdAt: {
+        type: Date,
+        default: Date.now
     }
-  },
-  { timestamps: true }
-);
-
-// Hash password before saving (same as previous models)
-userSchema.pre("save", async function (next) {
-  if (!this.isModified("password")) return next();
-  this.password = await bcrypt.hash(this.password, 10);
-  next();
 });
 
-// Compare password
-userSchema.methods.matchPassword = async function (enteredPassword) {
-  return await bcrypt.compare(enteredPassword, this.password);
+// ------------------------------------
+// Pre-save Middleware: Encrypt password
+// ------------------------------------
+UserSchema.pre('save', async function(next) {
+    if (!this.isModified('password')) {
+        return next();
+    }
+    const salt = await bcrypt.genSalt(10);
+    this.password = await bcrypt.hash(this.password, salt);
+    next();
+});
+
+// ------------------------------------
+// Instance Method: Sign JWT and return
+// ------------------------------------
+UserSchema.methods.getSignedJwtToken = function() {
+    return jwt.sign({ id: this._id, role: this.role, profileId: this.profileId }, process.env.JWT_SECRET, {
+        expiresIn: process.env.JWT_EXPIRE
+    });
 };
 
-// Hide password in responses
-userSchema.methods.toJSON = function () {
-  const obj = this.toObject();
-  delete obj.password;
-  return obj;
+// ------------------------------------
+// Instance Method: Match user entered password to hashed password in database
+// ------------------------------------
+UserSchema.methods.matchPassword = async function(enteredPassword) {
+    return await bcrypt.compare(enteredPassword, this.password);
 };
 
-module.exports = mongoose.model("User", userSchema);
+module.exports = mongoose.model('User', UserSchema);
