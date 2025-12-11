@@ -13,7 +13,7 @@ const {
 
 // Model Imports
 const User = require("../models/User");
-const Patient = require("../models/Patient");
+const Patient = require("../models/patient");
 const Practitioner = require("../models/Practitioner");
 const Verification = require("../models/Verification");
 // const Admin = require("../models/Admin"); // Not currently used, often linked via User model

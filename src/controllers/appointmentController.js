@@ -3,7 +3,7 @@
  * @desc Controller functions for managing appointments: booking, viewing, and status updates.
  */
 const Appointment = require("../models/Appointment");
-const Patient = require("../models/Patient");
+const Patient = require("../models/patient");
 const Practitioner = require("../models/Practitioner");
 const asyncHandler = require('../middlewares/async');
 const { NotFoundError, BadRequestError, ConflictError } = require('../utils/HttpError');
