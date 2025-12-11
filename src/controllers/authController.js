@@ -25,7 +25,7 @@ const { setAuthCookie } = require('../utils/generateToken'); // New helper funct
 const User = require("../models/User");
 const Patient = require("../models/patient_temp");
 const Practitioner = require("../models/Practitioner");
-const Verification = require("../models/Verification");
+const Verification = require("../models/Verification_temp");
 
 /* =====================================================
    📝 1. REGISTRATION (Unified Entry Point)

@@ -1,7 +1,7 @@
 // src/controllers/verificationController.js
 const User = require("../models/User");
 const Practitioner = require("../models/Practitioner");
-const Verification = require("../models/Verification"); // Our new model for KYC/KYP
+const Verification = require("../models/Verification_temp"); // Our new model for KYC/KYP
 const Transaction = require("../models/Transaction"); // For payment tracking
 const sendEmail = require("../utils/sendMagicLogicEmail");
 const mongoose = require("mongoose");

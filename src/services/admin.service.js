@@ -3,7 +3,7 @@ const User = require("../models/User");
 const Patient = require("../models/patient_temp");
 const Practitioner = require("../models/Practitioner");
 const Appointment = require("../models/Appointment");
-const Verification = require("../models/Verification");
+const Verification = require("../models/Verification_temp");
 const Transaction = require("../models/Transaction");
 const mongoose = require("mongoose");
 

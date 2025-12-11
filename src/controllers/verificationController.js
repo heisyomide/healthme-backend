@@ -16,7 +16,7 @@ const {
 
 // Model Imports (Uncomment when created)
 const Practitioner = require("../models/Practitioner");
-const Verification = require("../models/Verification");
+const Verification = require("../models/Verification_temp");
 
 /* =====================================================
    A. PRACTITIONER-FACING ROUTES (KYC Submission)

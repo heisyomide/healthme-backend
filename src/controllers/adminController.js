@@ -15,7 +15,7 @@ const {
 const User = require("../models/User");
 const Patient = require("../models/patient_temp");
 const Practitioner = require("../models/Practitioner");
-const Verification = require("../models/Verification");
+const Verification = require("../models/Verification_temp");
 // const Admin = require("../models/Admin"); // Not currently used, often linked via User model
 
 /* =====================================================

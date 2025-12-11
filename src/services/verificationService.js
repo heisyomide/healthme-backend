@@ -1,5 +1,5 @@
 // src/services/verificationService.js
-const Verification = require('../models/Verification');
+const Verification = require('../models/Verification_temp');
 const Practitioner = require('../models/Practitioner');
 const Patient = require('../models/patient_temp');
 const mongoose = require('mongoose');
