@@ -43,7 +43,7 @@ app.use(cookieParser());
 // --- CORS Configuration ---
 const allowedOrigins = process.env.CORS_ORIGINS 
     ? process.env.CORS_ORIGINS.split(',') 
-    : ["http://localhost:3000", "http://127.0.0.1:3000"];
+    : ["http://localhost:3000", "http://127.0.0.1:3000" , "https://healthme-backend.onrender.com" , "https://healthme.vercel.app"];
 
 app.use(
   cors({
